@@ -1,0 +1,7 @@
+{
+  "serviceName": "payment-service",
+  "errorLog": "org.postgresql.util.PSQLException: Connection refused\ncom.zaxxer.hikari.pool.HikariPool$PoolInitializationException: Failed to initialize pool",
+  "environment": "production",
+  "recentDeploy": true,
+  "previousIncidentNotes": "The last outage involved rotated database credentials after a deploy."
+}
