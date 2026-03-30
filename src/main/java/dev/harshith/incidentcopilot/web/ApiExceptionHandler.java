@@ -7,6 +7,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.validation.BindException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -37,6 +38,34 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 								java.util.LinkedHashMap::new
 						))
 		);
+		return ResponseEntity.badRequest().body(detail);
+	}
+
+	@ExceptionHandler(BindException.class)
+	public ResponseEntity<ProblemDetail> handleBindException(BindException exception) {
+		ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+		detail.setTitle("Invalid request parameters");
+		detail.setType(URI.create("https://incident-copilot.dev/problems/invalid-parameters"));
+		detail.setDetail("One or more request parameters failed validation.");
+		detail.setProperty(
+				"fieldErrors",
+				exception.getBindingResult().getFieldErrors().stream()
+						.collect(Collectors.toMap(
+								fieldError -> fieldError.getField(),
+								fieldError -> fieldError.getDefaultMessage() == null ? "Invalid value" : fieldError.getDefaultMessage(),
+								(left, right) -> left,
+								java.util.LinkedHashMap::new
+						))
+		);
+		return ResponseEntity.badRequest().body(detail);
+	}
+
+	@ExceptionHandler(IllegalArgumentException.class)
+	public ResponseEntity<ProblemDetail> handleIllegalArgument(IllegalArgumentException exception) {
+		ProblemDetail detail = ProblemDetail.forStatus(HttpStatus.BAD_REQUEST);
+		detail.setTitle("Invalid request parameters");
+		detail.setType(URI.create("https://incident-copilot.dev/problems/invalid-parameters"));
+		detail.setDetail(exception.getMessage());
 		return ResponseEntity.badRequest().body(detail);
 	}
 

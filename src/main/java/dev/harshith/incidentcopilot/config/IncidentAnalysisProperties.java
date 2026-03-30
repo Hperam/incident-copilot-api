@@ -4,6 +4,7 @@ import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
 import java.time.Duration;
+import java.nio.file.Path;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -17,6 +18,8 @@ public record IncidentAnalysisProperties(
 		String runbookLocation,
 		String openaiBaseUrl,
 		String defaultOpenaiModel,
-		Duration aiTimeout
+		Duration aiTimeout,
+		Path credentialStoreDirectory,
+		Path masterKeyPath
 ) {
 }

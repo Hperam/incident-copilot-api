@@ -30,6 +30,7 @@ public class IncidentAnalysisService {
 	private final RunbookRetrievalService runbookRetrievalService;
 	private final IncidentAiClient incidentAiClient;
 	private final NoOpIncidentAiClient noOpIncidentAiClient;
+	private final UserCredentialService userCredentialService;
 	private final IncidentAnalysisProperties properties;
 	private final MeterRegistry meterRegistry;
 
@@ -38,6 +39,7 @@ public class IncidentAnalysisService {
 			RunbookRetrievalService runbookRetrievalService,
 			IncidentAiClient incidentAiClient,
 			NoOpIncidentAiClient noOpIncidentAiClient,
+			UserCredentialService userCredentialService,
 			IncidentAnalysisProperties properties,
 			MeterRegistry meterRegistry
 	) {
@@ -45,15 +47,17 @@ public class IncidentAnalysisService {
 		this.runbookRetrievalService = runbookRetrievalService;
 		this.incidentAiClient = incidentAiClient;
 		this.noOpIncidentAiClient = noOpIncidentAiClient;
+		this.userCredentialService = userCredentialService;
 		this.properties = properties;
 		this.meterRegistry = meterRegistry;
 	}
 
 	@Observed(name = "incident.analysis")
-	public IncidentAnalysisResponse analyze(IncidentAnalysisRequest request, AiRequestOptions aiRequestOptions) {
+	public IncidentAnalysisResponse analyze(IncidentAnalysisRequest request, String userId) {
 		Timer.Sample timer = Timer.start(meterRegistry);
 		List<RuleMatch> matchedRules = ruleBasedIncidentAnalyzer.analyze(request);
 		List<RunbookSnippet> runbookSnippets = runbookRetrievalService.retrieve(request);
+		AiRequestOptions aiRequestOptions = resolveAiRequestOptions(userId);
 		IncidentAiClient aiClient = properties.aiEnabled() && aiRequestOptions.hasApiKey() ? incidentAiClient : noOpIncidentAiClient;
 		AiAnalysisContext context = new AiAnalysisContext(request, aiRequestOptions, properties.promptVersion(), matchedRules, runbookSnippets);
 
@@ -75,7 +79,7 @@ public class IncidentAnalysisService {
 			);
 		}
 		else {
-			fallbackReason = fallbackReason(aiRequestOptions);
+			fallbackReason = fallbackReason(userId, aiRequestOptions);
 			response = buildFallbackResponse(request, matchedRules, runbookSnippets, aiAttempted, fallbackReason, 0L);
 		}
 
@@ -113,12 +117,28 @@ public class IncidentAnalysisService {
 		return completed;
 	}
 
-	private String fallbackReason(AiRequestOptions aiRequestOptions) {
+	private AiRequestOptions resolveAiRequestOptions(String userId) {
+		if (userId == null || userId.isBlank()) {
+			return new AiRequestOptions(null, null);
+		}
+
+		OpenAiCredentialStore.StoredOpenAiCredential credential = userCredentialService.resolveOpenAiCredential(userId);
+		if (credential == null) {
+			return new AiRequestOptions(null, null);
+		}
+
+		return new AiRequestOptions(credential.apiKey(), credential.defaultModel());
+	}
+
+	private String fallbackReason(String userId, AiRequestOptions aiRequestOptions) {
 		if (!properties.aiEnabled()) {
 			return "AI_DISABLED";
 		}
+		if (userId == null || userId.isBlank()) {
+			return "USER_ID_MISSING";
+		}
 		if (!aiRequestOptions.hasApiKey()) {
-			return "REQUEST_API_KEY_MISSING";
+			return "USER_API_KEY_MISSING";
 		}
 		return "LOW_CONFIDENCE_OR_UNAVAILABLE";
 	}

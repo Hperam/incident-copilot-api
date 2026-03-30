@@ -1,6 +1,5 @@
 package dev.harshith.incidentcopilot.web;
 
-import dev.harshith.incidentcopilot.model.AiRequestOptions;
 import dev.harshith.incidentcopilot.model.IncidentAnalysisRequest;
 import dev.harshith.incidentcopilot.model.IncidentAnalysisResponse;
 import dev.harshith.incidentcopilot.service.IncidentAnalysisService;
@@ -27,9 +26,8 @@ public class IncidentAnalysisController {
 	@ResponseStatus(HttpStatus.OK)
 	public IncidentAnalysisResponse analyze(
 			@Valid @RequestBody IncidentAnalysisRequest request,
-			@RequestHeader(value = "X-OpenAI-API-Key", required = false) String openAiApiKey,
-			@RequestHeader(value = "X-OpenAI-Model", required = false) String openAiModel
+			@RequestHeader(value = "X-User-Id", required = false) String userId
 	) {
-		return incidentAnalysisService.analyze(request, new AiRequestOptions(openAiApiKey, openAiModel));
+		return incidentAnalysisService.analyze(request, userId);
 	}
 }
