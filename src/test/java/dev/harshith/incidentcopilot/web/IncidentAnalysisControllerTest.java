@@ -14,7 +14,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = {
-		"incident.analysis.ai-enabled=false",
 		"incident.analysis.runbook-location=classpath:/runbooks"
 })
 @AutoConfigureMockMvc
@@ -37,7 +36,7 @@ class IncidentAnalysisControllerTest {
 								"""))
 				.andExpect(status().isOk())
 				.andExpect(jsonPath("$.analysisMode", equalTo("RULE_BASED_FALLBACK")))
-				.andExpect(jsonPath("$.audit.fallbackReason", equalTo("AI_DISABLED")));
+				.andExpect(jsonPath("$.audit.fallbackReason", equalTo("REQUEST_API_KEY_MISSING")));
 	}
 
 	@Test

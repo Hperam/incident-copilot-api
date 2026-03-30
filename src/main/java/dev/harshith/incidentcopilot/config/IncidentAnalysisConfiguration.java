@@ -2,27 +2,36 @@ package dev.harshith.incidentcopilot.config;
 
 import dev.harshith.incidentcopilot.service.IncidentAiClient;
 import dev.harshith.incidentcopilot.service.NoOpIncidentAiClient;
-import dev.harshith.incidentcopilot.service.SpringAiIncidentAiClient;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import dev.harshith.incidentcopilot.service.OpenAiIncidentAiClient;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.web.client.RestClient;
 
 @Configuration
 @EnableConfigurationProperties(IncidentAnalysisProperties.class)
 public class IncidentAnalysisConfiguration {
 
 	@Bean
-	@ConditionalOnBean(ChatClient.Builder.class)
-	IncidentAiClient incidentAiClient(ChatClient.Builder chatClientBuilder) {
-		return new SpringAiIncidentAiClient(chatClientBuilder.build());
+	RestClient incidentAiRestClient(RestClient.Builder restClientBuilder, IncidentAnalysisProperties properties) {
+		SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+		requestFactory.setConnectTimeout(properties.aiTimeout());
+		requestFactory.setReadTimeout(properties.aiTimeout());
+
+		return restClientBuilder
+				.baseUrl(properties.openaiBaseUrl())
+				.requestFactory(requestFactory)
+				.build();
 	}
 
 	@Bean
-	@ConditionalOnMissingBean(IncidentAiClient.class)
-	IncidentAiClient noOpIncidentAiClient() {
+	IncidentAiClient incidentAiClient(RestClient incidentAiRestClient, IncidentAnalysisProperties properties) {
+		return new OpenAiIncidentAiClient(incidentAiRestClient, properties);
+	}
+
+	@Bean
+	NoOpIncidentAiClient noOpIncidentAiClient() {
 		return new NoOpIncidentAiClient();
 	}
 }

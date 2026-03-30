@@ -1,6 +1,6 @@
 # Incident Copilot API
 
-AI-assisted incident triage service built with Spring Boot. It uses LLMs for summarization and next-step suggestions, with rule-based checks, fallbacks, observability, and CI to keep the system production-minded.
+AI-assisted incident triage service built with Spring Boot. It uses LLMs for summarization and next-step suggestions, with rule-based checks, fallbacks, observability, and CI to keep the system production-minded. The beginner path is intentionally plug-and-play: run the app locally, call one endpoint, and optionally bring your own OpenAI key per request.
 
 ## Problem statement
 
@@ -24,7 +24,7 @@ The project is intentionally opinionated: AI is helpful for synthesis, but guard
 
 - Rule-based checks run first for obvious known failures
 - AI output must be structurally valid and meet a confidence threshold
-- If AI is disabled, unavailable, times out, or returns weak output, the API returns a rule-based fallback
+- If the caller does not provide an OpenAI key, AI is unavailable, the model times out, or the response is weak, the API returns a rule-based fallback
 - Audit metadata captures prompt version, latency, fallback reason, and retrieved runbooks
 
 ## Architecture
@@ -34,8 +34,8 @@ flowchart LR
     A["POST /incidents/analyze"] --> B["Validation"]
     B --> C["Rule-based analyzer"]
     C --> D["Keyword runbook retrieval"]
-    D --> E{"AI enabled and usable?"}
-    E -->|Yes| F["Spring AI ChatClient"]
+    D --> E{"Request includes OpenAI key?"}
+    E -->|Yes| F["OpenAI chat completion call"]
     E -->|No| G["Safe fallback response"]
     F --> H{"Confidence >= threshold?"}
     H -->|Yes| I["AI-assisted response"]
@@ -47,6 +47,17 @@ flowchart LR
 ## API
 
 ### `POST /incidents/analyze`
+
+Optional request headers:
+
+- `X-OpenAI-API-Key`: caller-supplied OpenAI API key for this one request
+- `X-OpenAI-Model`: optional override, defaults to `gpt-4o-mini`
+
+Why headers instead of putting the key in JSON:
+
+- easier to reuse with curl/Postman
+- avoids mixing secrets into request payloads or saved sample bodies
+- keeps the server stateless with respect to model credentials
 
 Sample request:
 
@@ -81,7 +92,7 @@ Sample response:
     "latencyMs": 21,
     "promptVersion": "v1",
     "aiAttempted": false,
-    "fallbackReason": "AI_DISABLED",
+    "fallbackReason": "REQUEST_API_KEY_MISSING",
     "matchedRules": ["recent-deploy", "database-connectivity"],
     "retrievedRunbooks": ["database-connection-runbook.md"]
   }
@@ -113,12 +124,14 @@ Run in fallback-only mode:
 ./mvnw spring-boot:run
 ```
 
-Enable Spring AI with OpenAI:
+Plug-and-play AI mode with a caller-provided key:
 
 ```bash
-export INCIDENT_CHAT_MODEL=openai
-export OPENAI_API_KEY=your_api_key
-./mvnw spring-boot:run
+curl -X POST http://localhost:8080/incidents/analyze \
+  -H "Content-Type: application/json" \
+  -H "X-OpenAI-API-Key: YOUR_OPENAI_KEY" \
+  -H "X-OpenAI-Model: gpt-4o-mini" \
+  -d @sample-data/incidents/payment-db-timeout.json
 ```
 
 Run tests:
@@ -131,11 +144,12 @@ Run tests:
 
 Key environment variables:
 
-- `INCIDENT_CHAT_MODEL`: set to `openai` to enable the Spring AI chat model. Defaults to `none`.
-- `OPENAI_API_KEY`: OpenAI API key used by Spring AI.
-- `INCIDENT_AI_ENABLED`: set to `false` to force rule-based fallback even if a model is configured.
-- `OPENAI_MODEL`: defaults to `gpt-4o-mini`.
+- `INCIDENT_AI_ENABLED`: set to `false` to force rule-based fallback for every request.
+- `OPENAI_BASE_URL`: defaults to `https://api.openai.com`.
+- `OPENAI_MODEL`: default model when the caller does not send `X-OpenAI-Model`.
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: optional OTLP endpoint for trace export.
+
+There is no required server-side OpenAI secret anymore. If a request omits `X-OpenAI-API-Key`, the app safely falls back to rule-based analysis.
 
 ## Observability
 
@@ -155,6 +169,7 @@ Suggested screenshots for the portfolio README:
 The test suite covers:
 
 - happy path AI-assisted analysis
+- safe fallback when the request omits an API key
 - safe fallback when AI is disabled
 - safe fallback when AI returns low-confidence output
 - Spring Boot context startup
@@ -163,7 +178,7 @@ The test suite covers:
 
 - The runbook retrieval is intentionally simple keyword matching for v1, not a full vector database
 - Confidence is model-provided plus threshold-gated, not calibrated against historical outcomes
-- The AI client currently targets one chat-model provider path to keep the project small and sharp
+- The AI client currently targets the OpenAI Chat Completions API with a request-scoped key to keep the setup minimal for beginners
 
 ## Future improvements
 

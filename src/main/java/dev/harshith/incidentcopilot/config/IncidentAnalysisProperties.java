@@ -3,6 +3,7 @@ package dev.harshith.incidentcopilot.config;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Min;
+import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
@@ -13,6 +14,9 @@ public record IncidentAnalysisProperties(
 		String promptVersion,
 		@DecimalMin("0.0") @DecimalMax("1.0") double confidenceThreshold,
 		@Min(1) int maxRunbookSnippets,
-		String runbookLocation
+		String runbookLocation,
+		String openaiBaseUrl,
+		String defaultOpenaiModel,
+		Duration aiTimeout
 ) {
 }

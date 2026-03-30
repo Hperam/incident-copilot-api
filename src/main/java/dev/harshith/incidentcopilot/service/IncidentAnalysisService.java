@@ -1,6 +1,7 @@
 package dev.harshith.incidentcopilot.service;
 
 import dev.harshith.incidentcopilot.config.IncidentAnalysisProperties;
+import dev.harshith.incidentcopilot.model.AiRequestOptions;
 import dev.harshith.incidentcopilot.model.AnalysisMode;
 import dev.harshith.incidentcopilot.model.IncidentAnalysisAudit;
 import dev.harshith.incidentcopilot.model.IncidentAnalysisRequest;
@@ -28,6 +29,7 @@ public class IncidentAnalysisService {
 	private final RuleBasedIncidentAnalyzer ruleBasedIncidentAnalyzer;
 	private final RunbookRetrievalService runbookRetrievalService;
 	private final IncidentAiClient incidentAiClient;
+	private final NoOpIncidentAiClient noOpIncidentAiClient;
 	private final IncidentAnalysisProperties properties;
 	private final MeterRegistry meterRegistry;
 
@@ -35,25 +37,27 @@ public class IncidentAnalysisService {
 			RuleBasedIncidentAnalyzer ruleBasedIncidentAnalyzer,
 			RunbookRetrievalService runbookRetrievalService,
 			IncidentAiClient incidentAiClient,
+			NoOpIncidentAiClient noOpIncidentAiClient,
 			IncidentAnalysisProperties properties,
 			MeterRegistry meterRegistry
 	) {
 		this.ruleBasedIncidentAnalyzer = ruleBasedIncidentAnalyzer;
 		this.runbookRetrievalService = runbookRetrievalService;
 		this.incidentAiClient = incidentAiClient;
+		this.noOpIncidentAiClient = noOpIncidentAiClient;
 		this.properties = properties;
 		this.meterRegistry = meterRegistry;
 	}
 
 	@Observed(name = "incident.analysis")
-	public IncidentAnalysisResponse analyze(IncidentAnalysisRequest request) {
+	public IncidentAnalysisResponse analyze(IncidentAnalysisRequest request, AiRequestOptions aiRequestOptions) {
 		Timer.Sample timer = Timer.start(meterRegistry);
 		List<RuleMatch> matchedRules = ruleBasedIncidentAnalyzer.analyze(request);
 		List<RunbookSnippet> runbookSnippets = runbookRetrievalService.retrieve(request);
-		IncidentAiClient aiClient = properties.aiEnabled() ? incidentAiClient : new NoOpIncidentAiClient();
-		AiAnalysisContext context = new AiAnalysisContext(request, properties.promptVersion(), matchedRules, runbookSnippets);
+		IncidentAiClient aiClient = properties.aiEnabled() && aiRequestOptions.hasApiKey() ? incidentAiClient : noOpIncidentAiClient;
+		AiAnalysisContext context = new AiAnalysisContext(request, aiRequestOptions, properties.promptVersion(), matchedRules, runbookSnippets);
 
-		boolean aiAttempted = properties.aiEnabled() && !(aiClient instanceof NoOpIncidentAiClient);
+		boolean aiAttempted = properties.aiEnabled() && aiRequestOptions.hasApiKey() && !(aiClient instanceof NoOpIncidentAiClient);
 		String fallbackReason = "NONE";
 		IncidentAnalysisResponse response;
 
@@ -71,7 +75,7 @@ public class IncidentAnalysisService {
 			);
 		}
 		else {
-			fallbackReason = properties.aiEnabled() ? "LOW_CONFIDENCE_OR_UNAVAILABLE" : "AI_DISABLED";
+			fallbackReason = fallbackReason(aiRequestOptions);
 			response = buildFallbackResponse(request, matchedRules, runbookSnippets, aiAttempted, fallbackReason, 0L);
 		}
 
@@ -107,6 +111,16 @@ public class IncidentAnalysisService {
 		);
 
 		return completed;
+	}
+
+	private String fallbackReason(AiRequestOptions aiRequestOptions) {
+		if (!properties.aiEnabled()) {
+			return "AI_DISABLED";
+		}
+		if (!aiRequestOptions.hasApiKey()) {
+			return "REQUEST_API_KEY_MISSING";
+		}
+		return "LOW_CONFIDENCE_OR_UNAVAILABLE";
 	}
 
 	private boolean isUsable(AiIncidentDraft draft) {
